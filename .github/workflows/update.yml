@@ -1,0 +1,43 @@
+name: 同步日历并发布加密私人站
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - name: 获取日程数据
+        env:
+          CALENDARS_JSON: ${{ secrets.CALENDARS_JSON }}
+        run: bash scripts/get-data.sh
+      - run: node scripts/inline-data.js
+      - name: 整页加密
+        env:
+          SITE_PASSWORD: ${{ secrets.SITE_PASSWORD }}
+        run: bash scripts/encrypt.sh
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deployment
+        uses: actions/deploy-pages@v4
